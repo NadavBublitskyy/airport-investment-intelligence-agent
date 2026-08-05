@@ -144,14 +144,15 @@ class TestCongestionComparator:
             patch("src.analytics.congestion_comparator.FaaArcgisClient.get_facility", fake_facility),
         )
 
-    def test_more_congested_airport_is_identified_correctly(self):
+    def test_most_congested_airport_is_identified_correctly(self):
         stats = {"LAX": (25.0, 0.3, 0.02, 15.0), "SNA": (10.0, 0.1, 0.01, 3.0)}
         facility = {"LAX": (4, 12000), "SNA": (2, 6000)}
         p1, p2 = self._patch(stats, facility)
         with p1, p2:
-            result = compare_congestion("LAX", "SNA")
+            result = compare_congestion(["LAX", "SNA"])
 
-        assert result.more_congested_airport == "LAX"
+        assert result.most_congested_airport == "LAX"
+        assert result.least_congested_airport == "SNA"
         assert result.congestion_score_gap > 0
 
     def test_weights_sum_to_one(self):
@@ -159,8 +160,33 @@ class TestCongestionComparator:
         facility = {"LAX": (4, 12000), "SNA": (2, 6000)}
         p1, p2 = self._patch(stats, facility)
         with p1, p2:
-            result = compare_congestion("LAX", "SNA")
+            result = compare_congestion(["LAX", "SNA"])
         assert round(sum(result.weights.values()), 6) == 1.0
+
+    def test_defaults_to_lax_vs_sna_when_no_list_given(self):
+        stats = {"LAX": (25.0, 0.3, 0.02, 15.0), "SNA": (10.0, 0.1, 0.01, 3.0)}
+        facility = {"LAX": (4, 12000), "SNA": (2, 6000)}
+        p1, p2 = self._patch(stats, facility)
+        with p1, p2:
+            result = compare_congestion()
+        assert {p.airport for p in result.airports} == {"LAX", "SNA"}
+
+    def test_generalizes_to_more_than_two_airports(self):
+        stats = {
+            "ORD": (28.0, 0.35, 0.03, 18.0),
+            "MDW": (12.0, 0.12, 0.01, 4.0),
+            "JFK": (20.0, 0.22, 0.02, 10.0),
+        }
+        facility = {"ORD": (8, 13000), "MDW": (3, 7000), "JFK": (4, 14500)}
+        p1, p2 = self._patch(stats, facility)
+        with p1, p2:
+            result = compare_congestion(["ORD", "MDW", "JFK"])
+
+        assert {p.airport for p in result.airports} == {"ORD", "MDW", "JFK"}
+        assert result.most_congested_airport == "ORD"
+        assert result.least_congested_airport == "MDW"
+        scores = [p.congestion_score_0_100 for p in result.airports]
+        assert scores == sorted(scores, reverse=True)
 
 
 def _score(taxi_out, delay_rate, cancel_rate, nas_delay):

@@ -1,21 +1,25 @@
 """
-LAX vs. SNA (or any two airports) congestion comparison (deterministic, no LLM).
+Airport congestion comparison across two or more airports (deterministic, no LLM).
 
 What this file does: pulls real per-flight On-Time Performance stats and
-real physical runway configuration for two airports and compares their
-composite Congestion Scores side by side.
+real physical runway configuration for a set of airports and compares
+their composite Congestion Scores side by side.
 
 Why it exists: this answers the business question "compare LA and Santa
 Ana airport congestion levels" with numbers pulled from a real BTS bulk
 data file (see `bts_ontime_client.py` for why this isn't a queryable API)
 and a fixed formula, not an LLM guess. The LLM's job is only to call this
-function and narrate the result.
+function and narrate the result. It takes any list of airport codes, not
+just a fixed pair - two is the default because that matches the seed
+question, but there's nothing in the formula itself that's pairwise; the
+result is a ranking, same as the other comparison tools in this project.
 
 How data moves: `compare_congestion()` calls the real BTS On-Time
 Performance client (for the Congestion Score) and the real FAA facilities
-client (for runway count context) for each airport, then returns a
-`CongestionComparisonResult` with both profiles, the winner, and the full
-resolution trace for every number involved.
+client (for runway count context) for each requested airport, then
+returns a `CongestionComparisonResult` with every profile ranked, the
+most/least congested named, and the full resolution trace for every
+number involved.
 """
 
 from __future__ import annotations
@@ -25,20 +29,24 @@ from src.config import scoring_constants
 from src.data_sources.bts_ontime_client import BtsOnTimeClient
 from src.data_sources.faa_arcgis_client import FaaArcgisClient
 
+DEFAULT_AIRPORTS = ("LAX", "SNA")
 
-def compare_congestion(airport_a: str = "LAX", airport_b: str = "SNA") -> CongestionComparisonResult:
-    """
-    Compare two airports' real Congestion Scores and physical runway counts.
 
-    Returns a `CongestionComparisonResult` naming the more congested
-    airport and the size of the gap, so the agent can answer both "which
-    one is worse" and "by how much."
+def compare_congestion(airports: list[str] | None = None) -> CongestionComparisonResult:
     """
+    Compare real Congestion Scores and physical runway counts across a set of airports.
+
+    Returns a `CongestionComparisonResult` ranked from most to least
+    congested, so the agent can answer "which one is worse," "by how
+    much," and, for more than two airports, "how do they all compare."
+    Defaults to LAX vs. SNA if no list is given.
+    """
+    airports = list(airports or DEFAULT_AIRPORTS)
     ontime_client = BtsOnTimeClient()
     facility_client = FaaArcgisClient()
 
     profiles: list[AirportCongestionProfile] = []
-    for airport in (airport_a, airport_b):
+    for airport in airports:
         ontime_result = ontime_client.get_airport_stats(airport)
         facility_result = facility_client.get_facility(airport)
         stats = ontime_result.data or {}
@@ -62,12 +70,13 @@ def compare_congestion(airport_a: str = "LAX", airport_b: str = "SNA") -> Conges
         )
 
     profiles.sort(key=lambda p: p.congestion_score_0_100, reverse=True)
-    gap = round(profiles[0].congestion_score_0_100 - profiles[1].congestion_score_0_100, 2)
+    gap = round(profiles[0].congestion_score_0_100 - profiles[-1].congestion_score_0_100, 2)
 
     c = scoring_constants
     return CongestionComparisonResult(
         airports=profiles,
-        more_congested_airport=profiles[0].airport,
+        most_congested_airport=profiles[0].airport,
+        least_congested_airport=profiles[-1].airport,
         congestion_score_gap=gap,
         weights={
             "taxi_out": c.congestion_weight_taxi_out,

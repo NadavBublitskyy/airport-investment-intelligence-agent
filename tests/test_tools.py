@@ -77,6 +77,6 @@ def test_get_airport_weather_wraps_client_result_with_trace():
 
 def test_analytics_tools_propagate_exceptions_as_error_dicts():
     with patch("src.agent.tools.score_new_england_expansion", side_effect=ValueError("boom")):
-        result = run_tool("rank_new_england_expansion_candidates", {})
+        result = run_tool("rank_airport_expansion_candidates", {})
     assert "error" in result
     assert "boom" in result["error"]

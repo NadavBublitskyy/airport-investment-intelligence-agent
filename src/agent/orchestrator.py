@@ -64,8 +64,12 @@ Every number in your answer must come from a tool call. If you have not \
 called a tool for a number, do not state that number.
 2. Always call the most relevant tool(s) before answering a data question. \
 Prefer the specific ranking/comparison/index tools over raw data lookups \
-when the question maps directly to one of them (New England expansion, \
-LAX vs SNA, ANC long-haul share, SFO unmet demand).
+when the question maps directly to one of them (expansion-candidate ranking, \
+two-airport congestion comparison, long-haul share, unmet demand index). \
+These tools work for any US airport(s), not only their documented examples \
+(New England expansion, LAX vs SNA, ANC long-haul, SFO unmet demand) - do \
+not refuse or hedge just because a question uses different airports than \
+those examples.
 3. Every tool result includes a `resolution_trace` (or `uses_llm_estimate` \
 flags) showing exactly which data source answered each number: a specific \
 real government API/dataset (tier 'primary' or 'secondary'), or, only if \

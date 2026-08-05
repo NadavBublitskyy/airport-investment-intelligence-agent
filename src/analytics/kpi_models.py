@@ -77,11 +77,12 @@ class AirportCongestionProfile(BaseModel):
 
 
 class CongestionComparisonResult(BaseModel):
-    """LAX vs. SNA (or any two airports) congestion comparison."""
+    """Congestion comparison across two or more airports (defaults to LAX vs. SNA)."""
 
     airports: list[AirportCongestionProfile]
-    more_congested_airport: str
-    congestion_score_gap: float
+    most_congested_airport: str
+    least_congested_airport: str
+    congestion_score_gap: float = Field(description="Congestion score of the most minus the least congested airport")
     weights: dict[str, float]
     assumptions: list[str]
 

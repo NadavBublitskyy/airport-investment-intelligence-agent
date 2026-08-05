@@ -47,15 +47,15 @@ def _trace_dicts(resolved: ResolvedData) -> list[dict]:
     ]
 
 
-def _rank_new_england_expansion_candidates(airports: list[str] | None = None) -> dict:
-    """Tool implementation: New England terminal-expansion ranking."""
+def _rank_airport_expansion_candidates(airports: list[str] | None = None) -> dict:
+    """Tool implementation: terminal-expansion ranking for any airport set (defaults to New England)."""
     result = score_new_england_expansion(airports=airports)
     return result.model_dump()
 
 
-def _compare_airport_congestion(airport_a: str = "LAX", airport_b: str = "SNA") -> dict:
-    """Tool implementation: two-airport congestion comparison."""
-    result = compare_congestion(airport_a=airport_a, airport_b=airport_b)
+def _compare_airport_congestion(airports: list[str] | None = None) -> dict:
+    """Tool implementation: congestion comparison across any set of airports (defaults to LAX vs SNA)."""
+    result = compare_congestion(airports=airports)
     return result.model_dump()
 
 
@@ -97,13 +97,15 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
-            "name": "rank_new_england_expansion_candidates",
+            "name": "rank_airport_expansion_candidates",
             "description": (
-                "Rank New England airports (default: BOS, BDL, PVD, PWM, MHT, BTV) by how strong a "
-                "candidate each is for terminal expansion investment. Returns a deterministic 0-100 "
-                "score per airport built from real BTS passenger/seat growth, real FAA runway data, "
-                "and real Census population growth. Use this for any question about which New England "
-                "airport(s) should get terminal expansion investment."
+                "Score and rank any set of US airports on how strong a candidate each is for terminal "
+                "expansion investment. Returns a deterministic 0-100 score per airport built from real "
+                "BTS passenger/seat growth, real FAA runway data, and real Census population growth for "
+                "each airport's home county. Pass any list of IATA codes; if omitted, defaults to a "
+                "New England set (BOS, BDL, PVD, PWM, MHT, BTV). "
+                'Example prompt this answers: "Which airports in New England are strong candidates for '
+                'terminal expansion?"'
             ),
             "parameters": {
                 "type": "object",
@@ -112,8 +114,8 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
                         "type": "array",
                         "items": {"type": "string"},
                         "description": (
-                            "Optional list of IATA airport codes to score, e.g. ['BOS','BDL']. "
-                            "Omit to score the full default New England set."
+                            "Optional list of IATA airport codes to score, e.g. ['BOS','BDL'] or "
+                            "['ORD','MDW']. Omit to score the default New England set."
                         ),
                     }
                 },
@@ -126,17 +128,24 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
         "function": {
             "name": "compare_airport_congestion",
             "description": (
-                "Compare two airports' operational congestion using a deterministic Congestion Score "
-                "built from real BTS On-Time Performance data (taxi-out time, departure delay rate, "
-                "cancellation rate, NAS delay minutes) plus real FAA runway counts. Defaults to LAX vs "
-                "SNA. Use this for any question comparing congestion, delays, or reliability between "
-                "two specific airports."
+                "Compare operational congestion across two or more US airports using a deterministic "
+                "Congestion Score built from real BTS On-Time Performance data (taxi-out time, "
+                "departure delay rate, cancellation rate, NAS delay minutes) plus real FAA runway "
+                "counts. Returns every airport ranked from most to least congested. Pass any list of "
+                "IATA codes (two or more); defaults to LAX vs SNA if omitted. "
+                'Example prompt this answers: "Compare LA and Santa Ana airport congestion levels."'
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "airport_a": {"type": "string", "description": "First IATA airport code, e.g. 'LAX'."},
-                    "airport_b": {"type": "string", "description": "Second IATA airport code, e.g. 'SNA'."},
+                    "airports": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": (
+                            "List of two or more IATA airport codes to compare, e.g. ['LAX','SNA'] or "
+                            "['ORD','MDW','JFK']. Omit to compare the default LAX vs SNA."
+                        ),
+                    }
                 },
                 "required": [],
             },
@@ -147,14 +156,16 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
         "function": {
             "name": "get_long_haul_flight_share",
             "description": (
-                "Compute the percentage of an airport's real departures that are long-haul (nonstop "
-                "distance >= 3000 statute miles), from real per-flight BTS route data. Defaults to ANC "
-                "(Anchorage). Use this for any question about long-haul flight share."
+                "Compute what share of any US airport's real departures are long-haul (nonstop distance "
+                ">= 3000 statute miles), from real per-flight BTS route data. Works for any IATA code; "
+                "defaults to ANC (Anchorage) if none is given. "
+                'Example prompt this answers: "What is the percentage of long haul flights out of '
+                'Anchorage airport?"'
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "airport": {"type": "string", "description": "IATA airport code, e.g. 'ANC'."},
+                    "airport": {"type": "string", "description": "IATA airport code, e.g. 'ANC' or 'JFK'."},
                 },
                 "required": [],
             },
@@ -165,12 +176,15 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
         "function": {
             "name": "get_unmet_demand_index",
             "description": (
-                "Compute the Estimated Unmet Demand Index (0-100) for SFO, combining real load-factor "
-                "pressure, real passenger-vs-seat growth gap, real market leakage to OAK/SJC (from real "
-                "ticketed passenger volumes), real fare premium, and real cancellation-rate gap. Also "
-                "returns a root-cause breakdown (gate/terminal limits vs runway bottleneck vs weather vs "
-                "regional pricing). Written specifically for SFO vs. OAK/SJC. Use this for any question "
-                "about SFO's unmet demand, capacity shortfall, or 'why can't SFO handle more flights.'"
+                "Compute an Estimated Unmet Demand Index (0-100) combining load-factor pressure, "
+                "passenger-vs-seat growth gap, market leakage to nearby secondary airports, fare "
+                "premium, and cancellation-rate gap, plus a root-cause breakdown (gate/terminal limits "
+                "vs runway bottleneck vs weather vs regional pricing). NOTE: unlike the other tools "
+                "here, this one is not airport-agnostic - the market-leakage and fare-premium "
+                "components are only wired up to real live data for SFO compared against its Bay Area "
+                "alternates OAK/SJC, since that's the one real public dataset (BTS airfare survey) that "
+                "supports this kind of multi-airport-market comparison. Call it for SFO. "
+                'Example prompt this answers: "What is the unmet flight demand in SFO airport and why?"'
             ),
             "parameters": {
                 "type": "object",
@@ -186,10 +200,12 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
         "function": {
             "name": "get_airport_facility_info",
             "description": (
-                "Get real raw physical facility data for one airport from the live FAA database: "
+                "Get real raw physical facility data for any US airport from the live FAA database: "
                 "number of runways, each runway's real length/width/surface type, and site acreage. "
                 "Use this when the user asks about physical infrastructure directly, or needs "
-                "supporting detail behind a score."
+                "supporting detail behind a score. "
+                'Example prompt this answers: "How many runways does BOS have, and how long is the '
+                'longest one?"'
             ),
             "parameters": {
                 "type": "object",
@@ -205,10 +221,11 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
         "function": {
             "name": "get_airport_live_status",
             "description": (
-                "Get the current real-time live FAA operational status for one airport: active ground "
-                "stops, ground delay programs, closures, and general arrival/departure delay advisories "
-                "happening right now. Use this when the user asks about current/live conditions, not "
-                "historical averages."
+                "Get the current real-time live FAA operational status for any US airport: active "
+                "ground stops, ground delay programs, closures, and general arrival/departure delay "
+                "advisories happening right now. Use this when the user asks about current/live "
+                "conditions, not historical averages. "
+                'Example prompt this answers: "Is there a ground stop at SFO right now?"'
             ),
             "parameters": {
                 "type": "object",
@@ -224,9 +241,13 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
         "function": {
             "name": "get_airport_weather",
             "description": (
-                "Get real current NWS weather conditions for one airport: visibility, wind speed/gusts, "
-                "conditions, and active weather alerts. Use this to help explain weather-driven "
-                "congestion or delays."
+                "Get real current NWS weather conditions for any US airport: visibility, wind "
+                "speed/gusts, conditions, and active weather alerts. Use this to help explain "
+                "weather-driven congestion or delays. Active-alert lookups are verified for a reference "
+                "set of major airports; for others, current conditions still resolve but alerts may "
+                "come back empty rather than falling back to an estimate. "
+                'Example prompt this answers: "What\'s the weather like at SFO right now, and could it '
+                'be causing delays?"'
             ),
             "parameters": {
                 "type": "object",
@@ -240,7 +261,7 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
 ]
 
 TOOL_REGISTRY: dict[str, Callable[..., dict]] = {
-    "rank_new_england_expansion_candidates": _rank_new_england_expansion_candidates,
+    "rank_airport_expansion_candidates": _rank_airport_expansion_candidates,
     "compare_airport_congestion": _compare_airport_congestion,
     "get_long_haul_flight_share": _get_long_haul_flight_share,
     "get_unmet_demand_index": _get_unmet_demand_index,
