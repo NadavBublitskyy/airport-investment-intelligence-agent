@@ -35,14 +35,21 @@ def calculate_long_haul_share(airport: str = "ANC") -> LongHaulResult:
     """
     Compute the real long-haul flight share for one airport, from real per-flight route data.
 
-    Returns a `LongHaulResult`. If no route data is available for the
-    airport at all (real API and LLM fallback both failed), all
-    percentages come back as 0.0 with an empty route list.
+    Raises `ValueError` if no route data could be resolved for the airport
+    at all (the live bulk file failed and there is no LLM fallback for
+    per-route data - see `bts_ontime_client.py`) rather than silently
+    returning a fabricated 0.0 that would look like "genuinely no
+    long-haul flights" instead of "we don't know."
     """
     threshold = scoring_constants.long_haul_min_distance_miles
     ontime_client = BtsOnTimeClient()
     result = ontime_client.get_airport_routes(airport)
-    data = result.data or {}
+    if result.data is None:
+        raise ValueError(
+            f"Could not resolve route data for {airport} from the real BTS On-Time Performance "
+            "bulk file (there is no LLM fallback for per-route data). Check network access."
+        )
+    data = result.data
     rows = data.get("routes", [])
     uses_llm = any(step.tier == "llm_fallback" and step.status == "success" for step in result.trace)
 

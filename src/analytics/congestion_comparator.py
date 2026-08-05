@@ -46,6 +46,7 @@ def compare_congestion(airports: list[str] | None = None) -> CongestionCompariso
     facility_client = FaaArcgisClient()
 
     profiles: list[AirportCongestionProfile] = []
+    unavailable: list[str] = []
     for airport in airports:
         ontime_result = ontime_client.get_airport_stats(airport)
         facility_result = facility_client.get_facility(airport)
@@ -53,6 +54,15 @@ def compare_congestion(airports: list[str] | None = None) -> CongestionCompariso
         facility = facility_result.data or {}
         trace = list(ontime_result.trace) + list(facility_result.trace)
         uses_llm = any(step.tier == "llm_fallback" and step.status == "success" for step in trace)
+
+        if not stats:
+            # Every real source AND the LLM fallback failed to produce
+            # operational stats for this airport. A fabricated
+            # congestion_score=0.0 would look like "zero congestion" and
+            # could win "least congested" purely because data is missing -
+            # exclude it instead of guessing, and say so in the assumptions.
+            unavailable.append(airport)
+            continue
 
         profiles.append(
             AirportCongestionProfile(
@@ -69,10 +79,37 @@ def compare_congestion(airports: list[str] | None = None) -> CongestionCompariso
             )
         )
 
+    if not profiles:
+        raise ValueError(
+            f"Could not resolve congestion data for any of {airports} from either the real BTS "
+            "API or the LLM fallback. Check network access and OPENROUTER_API_KEY."
+        )
+
     profiles.sort(key=lambda p: p.congestion_score_0_100, reverse=True)
     gap = round(profiles[0].congestion_score_0_100 - profiles[-1].congestion_score_0_100, 2)
 
     c = scoring_constants
+    assumptions = [
+        "Congestion Score = 0.35*taxi-out(normalized) + 0.30*departure-delay->=15min rate "
+        "+ 0.20*cancellation rate + 0.15*NAS-delay-minutes(normalized), scaled to 0-100.",
+        f"Taxi-out minutes are normalized against a {c.congestion_taxi_out_reference_minutes:.0f}-minute "
+        "reference ceiling and NAS delay minutes against a "
+        f"{c.congestion_nas_delay_reference_minutes:.0f}-minute reference ceiling, so the two "
+        "minutes-based inputs are comparable to the two rate-based inputs.",
+        "Based on the most recent full calendar month of real BTS On-Time Performance data "
+        "available (see each profile's source_month) - a single-month snapshot, not a full-year "
+        "average, chosen so the agent can answer in seconds rather than downloading 12 months "
+        "of national flight data per question.",
+        "Covers passenger-carrier flights reported to BTS On-Time Performance; cargo-only carrier "
+        "operations are not included in this dataset.",
+    ]
+    if unavailable:
+        assumptions.append(
+            f"No congestion data (live or LLM-estimated) could be resolved for: "
+            f"{', '.join(unavailable)} - excluded from this comparison rather than shown with a "
+            "fabricated score."
+        )
+
     return CongestionComparisonResult(
         airports=profiles,
         most_congested_airport=profiles[0].airport,
@@ -84,18 +121,5 @@ def compare_congestion(airports: list[str] | None = None) -> CongestionCompariso
             "cancellation_rate": c.congestion_weight_cancellation_rate,
             "nas_delay": c.congestion_weight_nas_delay,
         },
-        assumptions=[
-            "Congestion Score = 0.35*taxi-out(normalized) + 0.30*departure-delay->=15min rate "
-            "+ 0.20*cancellation rate + 0.15*NAS-delay-minutes(normalized), scaled to 0-100.",
-            f"Taxi-out minutes are normalized against a {c.congestion_taxi_out_reference_minutes:.0f}-minute "
-            "reference ceiling and NAS delay minutes against a "
-            f"{c.congestion_nas_delay_reference_minutes:.0f}-minute reference ceiling, so the two "
-            "minutes-based inputs are comparable to the two rate-based inputs.",
-            "Based on the most recent full calendar month of real BTS On-Time Performance data "
-            "available (see each profile's source_month) - a single-month snapshot, not a full-year "
-            "average, chosen so the agent can answer in seconds rather than downloading 12 months "
-            "of national flight data per question.",
-            "Covers passenger-carrier flights reported to BTS On-Time Performance; cargo-only carrier "
-            "operations are not included in this dataset.",
-        ],
+        assumptions=assumptions,
     )

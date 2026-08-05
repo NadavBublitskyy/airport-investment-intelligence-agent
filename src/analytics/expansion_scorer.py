@@ -54,13 +54,31 @@ def _min_max_normalize(values: list[float]) -> list[float]:
     return [(v - lo) / (hi - lo) for v in values]
 
 
-def _runway_constraint_raw(facility: dict | None) -> float:
-    """Higher output = more physically constrained (fewer/shorter runways)."""
-    facility = facility or {}
-    num_runways = facility.get("num_runways") or 1
-    longest_ft = facility.get("longest_runway_ft") or 1
-    capacity_proxy = num_runways * (longest_ft / 10_000)
-    return 1.0 / capacity_proxy if capacity_proxy else 0.0
+def _min_max_normalize_with_gaps(values: list[float | None]) -> list[float]:
+    """
+    Like `_min_max_normalize()`, but for a factor where some airports have no
+    real data at all (`None`). Those airports get a neutral 0.5 instead of
+    participating in the min/max range - without this, a missing facility
+    record used to default to an artificially extreme "worst case" value
+    (see `_runway_constraint_raw`), which could make an airport with simply
+    *no data* look like the single most runway-constrained airport in the
+    ranked set and distort the whole comparison.
+    """
+    present = [v for v in values if v is not None]
+    if not present:
+        return [0.5 for _ in values]
+    lo, hi = min(present), max(present)
+    if hi == lo:
+        return [0.5 for _ in values]
+    return [0.5 if v is None else (v - lo) / (hi - lo) for v in values]
+
+
+def _runway_constraint_raw(facility: dict | None) -> float | None:
+    """Higher output = more physically constrained (fewer/shorter runways). None = no real facility data."""
+    if not facility or not facility.get("num_runways") or not facility.get("longest_runway_ft"):
+        return None
+    capacity_proxy = facility["num_runways"] * (facility["longest_runway_ft"] / 10_000)
+    return 1.0 / capacity_proxy if capacity_proxy else None
 
 
 def score_new_england_expansion(airports: list[str] | None = None) -> ExpansionRankingResult:
@@ -105,13 +123,14 @@ def score_new_england_expansion(airports: list[str] | None = None) -> ExpansionR
         )
         facility = facility_result.data or {}
         growth = growth_result.data or {}
+        runway_constraint_raw = _runway_constraint_raw(facility)
 
         raw_rows.append(
             {
                 "airport": airport,
                 "capacity_pressure_raw": pax_growth_pct - seat_growth_pct,
                 "load_factor_raw": late["load_factor"] or 0.0,
-                "runway_constraint_raw": _runway_constraint_raw(facility),
+                "runway_constraint_raw": runway_constraint_raw,
                 "census_growth_raw": growth.get("population_growth_pct_5yr", 0.0),
                 "passenger_growth_pct": round(pax_growth_pct, 2),
                 "seat_growth_pct": round(seat_growth_pct, 2),
@@ -129,10 +148,32 @@ def score_new_england_expansion(airports: list[str] | None = None) -> ExpansionR
 
     capacity_norm = _min_max_normalize([r["capacity_pressure_raw"] for r in raw_rows])
     load_norm = _min_max_normalize([r["load_factor_raw"] for r in raw_rows])
-    runway_norm = _min_max_normalize([r["runway_constraint_raw"] for r in raw_rows])
+    runway_norm = _min_max_normalize_with_gaps([r["runway_constraint_raw"] for r in raw_rows])
     census_norm = _min_max_normalize([r["census_growth_raw"] for r in raw_rows])
 
+    airports_missing_runway_data = [r["airport"] for r in raw_rows if r["runway_constraint_raw"] is None]
+
     c = scoring_constants
+    assumptions = [
+        f"Growth is measured {EARLY_YEAR} -> {LATE_YEAR} (5-year window, spans the 2020 pandemic dip).",
+        "Each factor is min-max normalized within the requested airport set, so this is a relative "
+        "ranking, not an absolute score comparable across different airport groups.",
+        "Runway constraint is a proxy (num_runways x longest_runway_ft), not a full airfield capacity "
+        "model (it ignores taxiway layout, terminal gate count, and airspace/ATC constraints - the "
+        "real FAA facilities dataset does not publish a gate count or hub-size category).",
+        "Regional population growth is county-level (US Census ACS 5-year estimate for the airport's "
+        "home county), used as a proxy for the whole catchment area.",
+        "Any airport whose data_sources show tier='llm_fallback' had at least one real API fail; "
+        "that airport's score is less reliable than one built entirely from live data.",
+    ]
+    if airports_missing_runway_data:
+        assumptions.append(
+            f"No real or LLM-estimated runway data could be resolved for: "
+            f"{', '.join(airports_missing_runway_data)} - their runway_constraint_score was set to a "
+            "neutral 0.5 rather than an extreme value, so missing data doesn't masquerade as the most "
+            "(or least) physically constrained airport in the ranking."
+        )
+
     scored: list[AirportExpansionScore] = []
     for row, cap, load, rwy, census in zip(raw_rows, capacity_norm, load_norm, runway_norm, census_norm):
         overall = (
@@ -167,16 +208,5 @@ def score_new_england_expansion(airports: list[str] | None = None) -> ExpansionR
             "runway_constraint": c.expansion_weight_runway_constraint,
             "census_growth": c.expansion_weight_census_growth,
         },
-        assumptions=[
-            f"Growth is measured {EARLY_YEAR} -> {LATE_YEAR} (5-year window, spans the 2020 pandemic dip).",
-            "Each factor is min-max normalized within the requested airport set, so this is a relative "
-            "ranking, not an absolute score comparable across different airport groups.",
-            "Runway constraint is a proxy (num_runways x longest_runway_ft), not a full airfield capacity "
-            "model (it ignores taxiway layout, terminal gate count, and airspace/ATC constraints - the "
-            "real FAA facilities dataset does not publish a gate count or hub-size category).",
-            "Regional population growth is county-level (US Census ACS 5-year estimate for the airport's "
-            "home county), used as a proxy for the whole catchment area.",
-            "Any airport whose data_sources show tier='llm_fallback' had at least one real API fail; "
-            "that airport's score is less reliable than one built entirely from live data.",
-        ],
+        assumptions=assumptions,
     )

@@ -1,0 +1,20 @@
+# Never let secrets or local-only state get baked into a Docker image layer.
+.env
+.git/
+.gitignore
+
+# Local dev/runtime state - irrelevant and sometimes large inside the image.
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+.DS_Store
+.cache/
+
+# Personal/local-only files - never meant to leave this machine.
+PROJECT_GUIDE_HE.md
+*.pdf
+
+# Not needed at runtime; keeps the image smaller.
+tests/

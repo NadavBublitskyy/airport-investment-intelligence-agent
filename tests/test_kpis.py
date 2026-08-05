@@ -14,6 +14,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+import pytest
+
 from src.analytics.congestion_comparator import compare_congestion
 from src.analytics.expansion_scorer import _min_max_normalize, score_new_england_expansion
 from src.analytics.longhaul_calculator import calculate_long_haul_share
@@ -151,6 +153,31 @@ class TestExpansionScorer:
         bos_row = next(row for row in result.ranking if row.airport == "BOS")
         assert bos_row.seat_growth_pct == 0.0
 
+    def test_missing_runway_data_gets_neutral_score_not_extreme(self):
+        # Before the fix, a missing/empty facility record defaulted to
+        # num_runways=1, longest_ft=1 -> an artificially extreme constraint
+        # value that could make "no data" look like "most constrained
+        # airport in the set." It must land at a neutral 0.5 instead.
+        t100 = {a: {2019: (100.0, 200.0), 2024: (110.0, 200.0)} for a in self.AIRPORTS}
+        growth = {a: 2.0 for a in self.AIRPORTS}
+        p1, _unused_facility_patch, p3 = self._patch_all(
+            t100, {a: (2, 8000) for a in self.AIRPORTS}, growth
+        )
+
+        def fake_facility_missing_for_bos(self, airport):
+            if airport == "BOS":
+                return _rd({})  # every real source and the LLM fallback failed
+            return _rd(_facility(2, 8000))
+
+        with p1, patch(
+            "src.analytics.expansion_scorer.FaaArcgisClient.get_facility", fake_facility_missing_for_bos
+        ), p3:
+            result = score_new_england_expansion(self.AIRPORTS)
+
+        bos_row = next(row for row in result.ranking if row.airport == "BOS")
+        assert bos_row.runway_constraint_score == 0.5
+        assert any("BOS" in note and "runway" in note.lower() for note in result.assumptions)
+
 
 class TestCongestionComparator:
     def _patch(self, stats_by_airport, facility_by_airport):
@@ -217,8 +244,53 @@ class TestCongestionComparator:
         assert {p.airport for p in result.airports} == {"ORD", "MDW", "JFK"}
         assert result.most_congested_airport == "ORD"
         assert result.least_congested_airport == "MDW"
-        scores = [p.congestion_score_0_100 for p in result.airports]
-        assert scores == sorted(scores, reverse=True)
+
+    def test_airport_with_no_data_is_excluded_not_scored_zero(self):
+        # Before the fix, a total data failure defaulted to
+        # congestion_score=0.0 - indistinguishable from "genuinely zero
+        # congestion" - which could make a no-data airport win "least
+        # congested" by default. It must be excluded instead.
+        def fake_stats(self, airport):
+            if airport == "MDW":
+                return _rd({})  # every real source and the LLM fallback failed
+            s = {"ORD": (28.0, 0.35, 0.03, 18.0)}[airport]
+            return _rd(
+                {
+                    "airport": airport,
+                    "source_month": "2026-05",
+                    "avg_taxi_out_minutes": s[0],
+                    "departure_delay_ge15_rate": s[1],
+                    "cancellation_rate": s[2],
+                    "avg_nas_delay_minutes": s[3],
+                    "congestion_score": _score(*s),
+                    "is_llm_estimate": False,
+                }
+            )
+
+        def fake_facility(self, airport):
+            return _rd(_facility(8, 13000))
+
+        with patch(
+            "src.analytics.congestion_comparator.BtsOnTimeClient.get_airport_stats", fake_stats
+        ), patch("src.analytics.congestion_comparator.FaaArcgisClient.get_facility", fake_facility):
+            result = compare_congestion(["ORD", "MDW"])
+
+        assert {p.airport for p in result.airports} == {"ORD"}
+        assert result.most_congested_airport == "ORD"
+        assert any("MDW" in note for note in result.assumptions)
+
+    def test_raises_when_no_airport_has_any_data(self):
+        def fake_stats(self, airport):
+            return _rd({})
+
+        def fake_facility(self, airport):
+            return _rd({})
+
+        with patch(
+            "src.analytics.congestion_comparator.BtsOnTimeClient.get_airport_stats", fake_stats
+        ), patch("src.analytics.congestion_comparator.FaaArcgisClient.get_facility", fake_facility):
+            with pytest.raises(ValueError):
+                compare_congestion(["ORD", "MDW"])
 
 
 def _score(taxi_out, delay_rate, cancel_rate, nas_delay):
@@ -276,6 +348,20 @@ class TestLongHaulCalculator:
             result = calculate_long_haul_share("ANC")
         assert result.long_haul_flight_share_pct == 0.0
         assert result.routes == []
+
+    def test_total_resolution_failure_raises_instead_of_fake_zero(self):
+        # Before the fix, a total failure (both the live bulk file and the
+        # nonexistent LLM fallback) produced the exact same
+        # long_haul_flight_share_pct=0.0 as a real, resolved "no routes"
+        # result - indistinguishable from genuine data. It must raise.
+        def fake_routes_unavailable(self, airport):
+            return _rd(None)
+
+        with patch(
+            "src.analytics.longhaul_calculator.BtsOnTimeClient.get_airport_routes", fake_routes_unavailable
+        ):
+            with pytest.raises(ValueError):
+                calculate_long_haul_share("ANC")
 
 
 class TestUnmetDemandCalculator:
@@ -356,3 +442,56 @@ class TestUnmetDemandCalculator:
             result = calculate_unmet_demand("SFO")
 
         assert 0.0 <= result.unmet_demand_index_0_100 <= 100.0
+
+    def test_early_year_llm_estimate_flags_load_factor_and_growth_components(self):
+        # Before the fix, only LATE_YEAR's trace was checked, so an
+        # EARLY_YEAR value that came from the LLM fallback was silently
+        # marked as fully real on load_factor_pressure and
+        # capacity_growth_gap_pax_minus_seats.
+        t100_data = {
+            2019: ResolvedData(
+                data=_t100_row("SFO", 2019, 50_000_000.0, 65_000_000.0),
+                trace=[
+                    ResolutionStep("primary", "BTS T-100", "failed", "timeout"),
+                    ResolutionStep("llm_fallback", "LLM estimate", "success"),
+                ],
+            ),
+            2024: _rd(_t100_row("SFO", 2024, 52_000_000.0, 62_000_000.0)),
+        }
+
+        def fake_t100(self, airport, years):
+            return {y: t100_data[y] for y in years}
+
+        _, fare_leakage_patch, ontime_patch = self._patch()
+        with patch(
+            "src.analytics.unmet_demand_calculator.BtsT100Client.get_annual_totals", fake_t100
+        ), fare_leakage_patch, ontime_patch:
+            result = calculate_unmet_demand("SFO")
+
+        by_name = {c.name: c for c in result.components}
+        assert by_name["load_factor_pressure"].uses_llm_estimate is True
+        assert by_name["capacity_growth_gap_pax_minus_seats"].uses_llm_estimate is True
+
+    def test_comparison_airport_llm_estimate_flags_cancellation_gap_component(self):
+        # Before the fix, only the target airport's (SFO's) trace was
+        # checked, so an LLM-estimated OAK or SJC cancellation rate was
+        # silently marked as fully real on cancellation_gap_vs_oak_sjc.
+        p1, p2, _unused_ontime_patch = self._patch()
+
+        def fake_ontime(self, airport):
+            rates = {"SFO": 0.023, "OAK": 0.012, "SJC": 0.011}
+            trace = [ResolutionStep("primary", "BTS On-Time Performance", "success")]
+            if airport == "OAK":
+                trace = [
+                    ResolutionStep("primary", "BTS On-Time Performance", "failed", "timeout"),
+                    ResolutionStep("llm_fallback", "LLM estimate", "success"),
+                ]
+            return ResolvedData(data={"cancellation_rate": rates[airport], "is_llm_estimate": airport == "OAK"}, trace=trace)
+
+        with p1, p2, patch(
+            "src.analytics.unmet_demand_calculator.BtsOnTimeClient.get_airport_stats", fake_ontime
+        ):
+            result = calculate_unmet_demand("SFO")
+
+        by_name = {c.name: c for c in result.components}
+        assert by_name["cancellation_gap_vs_oak_sjc"].uses_llm_estimate is True

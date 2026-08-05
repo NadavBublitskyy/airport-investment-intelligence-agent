@@ -83,7 +83,13 @@ def calculate_unmet_demand(airport: str = "SFO") -> UnmetDemandResult:
         else 0.0
     )
     load_factor = late["load_factor"]
-    load_factor_llm = any(s.tier == "llm_fallback" and s.status == "success" for s in late_rd.trace)
+    # Both years feed load_factor (via `late`) and capacity_growth_gap (via
+    # both `early` and `late`) - checking only late_rd's trace missed the
+    # case where EARLY_YEAR came from the LLM fallback but LATE_YEAR was
+    # real, which would mark a partly-estimated component as fully real.
+    load_factor_llm = any(
+        s.tier == "llm_fallback" and s.status == "success" for s in early_rd.trace + late_rd.trace
+    )
 
     fare_leakage_rd = macro_client.get_sfo_fare_and_leakage()
     all_trace += fare_leakage_rd.trace
@@ -97,14 +103,21 @@ def calculate_unmet_demand(airport: str = "SFO") -> UnmetDemandResult:
     target_cancellation_rate = (target_ontime_rd.data or {}).get("cancellation_rate", 0.0)
 
     comparison_rates = []
+    comparison_traces: list[ResolutionStep] = []
     for comp_airport in LEAKAGE_COMPARISON_AIRPORTS:
         comp_rd = ontime_client.get_airport_stats(comp_airport)
         all_trace += comp_rd.trace
+        comparison_traces += comp_rd.trace
         comparison_rates.append((comp_rd.data or {}).get("cancellation_rate", 0.0))
     avg_comparison_cancellation_rate = sum(comparison_rates) / len(comparison_rates)
     cancellation_gap_pct = (target_cancellation_rate - avg_comparison_cancellation_rate) * 100
+    # cancellation_gap_pct depends on the target airport's rate AND the
+    # OAK/SJC comparison rates - checking only the target's trace missed an
+    # LLM-estimated OAK or SJC rate, which would mark a partly-estimated
+    # component as fully real.
     cancellation_llm = any(
-        s.tier == "llm_fallback" and s.status == "success" for s in target_ontime_rd.trace
+        s.tier == "llm_fallback" and s.status == "success"
+        for s in list(target_ontime_rd.trace) + comparison_traces
     )
 
     # --- Normalize each raw signal to 0-1 ---
