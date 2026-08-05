@@ -1,0 +1,17 @@
+{
+  "_comment": "Shaped exactly like real responses from api.census.gov/data/{year}/acs/acs5 and apps.bea.gov/api/data (verified live against Suffolk County, MA during development).",
+  "census_population_2019": [["NAME", "B01003_001E", "state", "county"], ["Suffolk County, Massachusetts", "797936", "25", "025"]],
+  "census_population_2024": [["NAME", "B01003_001E", "state", "county"], ["Suffolk County, Massachusetts", "785121", "25", "025"]],
+  "census_no_data": [["NAME", "B01003_001E", "state", "county"]],
+  "bea_income_growth": {
+    "BEAAPI": {
+      "Results": {
+        "Data": [
+          {"Code": "CAINC1-3", "GeoFips": "25025", "GeoName": "Suffolk", "TimePeriod": "2019", "DataValue": "81383"},
+          {"Code": "CAINC1-3", "GeoFips": "25025", "GeoName": "Suffolk", "TimePeriod": "2023", "DataValue": "105596"}
+        ]
+      }
+    }
+  },
+  "bea_no_data": {"BEAAPI": {"Results": {"Error": {"APIErrorCode": "101"}}}}
+}

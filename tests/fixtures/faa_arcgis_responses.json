@@ -1,0 +1,20 @@
+{
+  "_comment": "Shaped exactly like real responses from the FAA NTAD ArcGIS FeatureServer (facilities and runways layers - field names verified live during development: ARPT_ID, ARPT_NAME, STATE_CODE, ACREAGE, FACILITY_USE_CODE, RWY_ID, RWY_LEN, RWY_WIDTH, SURFACE_TYPE_CODE).",
+  "facilities_BOS": {
+    "features": [
+      {"attributes": {"ARPT_ID": "BOS", "ARPT_NAME": "GENERAL EDWARD LAWRENCE LOGAN INTL", "STATE_CODE": "MA", "ACREAGE": 2384, "FACILITY_USE_CODE": "PU"}}
+    ]
+  },
+  "runways_BOS": {
+    "features": [
+      {"attributes": {"RWY_ID": "04L/22R", "RWY_LEN": 7864, "RWY_WIDTH": 150, "SURFACE_TYPE_CODE": "ASPH"}},
+      {"attributes": {"RWY_ID": "04R/22L", "RWY_LEN": 10006, "RWY_WIDTH": 150, "SURFACE_TYPE_CODE": "ASPH"}},
+      {"attributes": {"RWY_ID": "09/27", "RWY_LEN": 7001, "RWY_WIDTH": 150, "SURFACE_TYPE_CODE": "ASPH"}},
+      {"attributes": {"RWY_ID": "14/32", "RWY_LEN": 5000, "RWY_WIDTH": 100, "SURFACE_TYPE_CODE": "ASPH"}},
+      {"attributes": {"RWY_ID": "15L/33R", "RWY_LEN": 2557, "RWY_WIDTH": 100, "SURFACE_TYPE_CODE": "ASPH"}},
+      {"attributes": {"RWY_ID": "15R/33L", "RWY_LEN": 10083, "RWY_WIDTH": 150, "SURFACE_TYPE_CODE": "ASPH"}}
+    ]
+  },
+  "facilities_empty": {"features": []},
+  "runways_empty": {"features": []}
+}

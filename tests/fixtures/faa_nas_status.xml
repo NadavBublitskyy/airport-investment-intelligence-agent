@@ -1,0 +1,34 @@
+<?xml version="1.0" ?>
+<!-- Shaped exactly like a real response from https://nasstatus.faa.gov/api/airport-status-information,
+     captured live during development (see src/data_sources/faa_nas_client.py). Multiple Delay_type
+     categories with different list-wrapper tags, which is why the parser walks generically for any
+     element with an ARPT child rather than hard-coding each wrapper tag name. -->
+<AIRPORT_STATUS_INFORMATION>
+	<Update_Time>Wed Aug 5 12:15:00 2026 GMT</Update_Time>
+	<Dtd_File>http://www.fly.faa.gov/AirportStatus.dtd</Dtd_File>
+	<Delay_type>
+		<Name>General Arrival/Departure Delay Info</Name>
+		<Arrival_Departure_Delay_List>
+			<Delay>
+				<ARPT>LGA</ARPT>
+				<Reason>TM Initiatives:SWAP:WX</Reason>
+				<Arrival_Departure Type="Departure">
+					<Min>31 minutes</Min>
+					<Max>45 minutes</Max>
+					<Trend>Increasing</Trend>
+				</Arrival_Departure>
+			</Delay>
+		</Arrival_Departure_Delay_List>
+	</Delay_type>
+	<Delay_type>
+		<Name>Airport Closures</Name>
+		<Airport_Closure_List>
+			<Airport>
+				<ARPT>SNA</ARPT>
+				<Reason>!SNA 07/058 SNA AD AP CLSD DLY 0630-1315 2608040630-2608081315</Reason>
+				<Start>Aug 04 at 06:30 UTC.</Start>
+				<Reopen>Aug 08 at 13:15 UTC.</Reopen>
+			</Airport>
+		</Airport_Closure_List>
+	</Delay_type>
+</AIRPORT_STATUS_INFORMATION>

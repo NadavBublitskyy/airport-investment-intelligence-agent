@@ -1,0 +1,20 @@
+{
+  "_comment": "Shaped exactly like real rows from the BTS On-Time Performance monthly bulk CSV (transtats.bts.gov), using its real column names (Origin, Dest, Distance, TaxiOut, DepDel15, Cancelled, NASDelay - verified against a real downloaded file during development). A small, hand-built sample, not a real extract.",
+  "lax_may_2026": [
+    {"Origin": "LAX", "Dest": "JFK", "Distance": "2475", "TaxiOut": "22", "TaxiIn": "9", "DepDel15": "1", "Cancelled": "0", "NASDelay": "8"},
+    {"Origin": "LAX", "Dest": "JFK", "Distance": "2475", "TaxiOut": "18", "TaxiIn": "8", "DepDel15": "0", "Cancelled": "0", "NASDelay": ""},
+    {"Origin": "LAX", "Dest": "SFO", "Distance": "337", "TaxiOut": "15", "TaxiIn": "6", "DepDel15": "0", "Cancelled": "0", "NASDelay": ""},
+    {"Origin": "LAX", "Dest": "SFO", "Distance": "337", "TaxiOut": "0", "TaxiIn": "0", "DepDel15": "0", "Cancelled": "1", "NASDelay": ""},
+    {"Origin": "LAX", "Dest": "ICN", "Distance": "5968", "TaxiOut": "30", "TaxiIn": "12", "DepDel15": "1", "Cancelled": "0", "NASDelay": "20"}
+  ],
+  "sna_may_2026": [
+    {"Origin": "SNA", "Dest": "SFO", "Distance": "372", "TaxiOut": "12", "TaxiIn": "5", "DepDel15": "0", "Cancelled": "0", "NASDelay": ""},
+    {"Origin": "SNA", "Dest": "DEN", "Distance": "846", "TaxiOut": "14", "TaxiIn": "6", "DepDel15": "0", "Cancelled": "0", "NASDelay": ""}
+  ],
+  "anc_may_2026": [
+    {"Origin": "ANC", "Dest": "SEA", "Distance": "1449", "TaxiOut": "10", "TaxiIn": "5", "DepDel15": "0", "Cancelled": "0", "NASDelay": ""},
+    {"Origin": "ANC", "Dest": "ORD", "Distance": "2846", "TaxiOut": "13", "TaxiIn": "6", "DepDel15": "0", "Cancelled": "0", "NASDelay": ""},
+    {"Origin": "ANC", "Dest": "ATL", "Distance": "3417", "TaxiOut": "15", "TaxiIn": "7", "DepDel15": "1", "Cancelled": "0", "NASDelay": "6"},
+    {"Origin": "ANC", "Dest": "DFW", "Distance": "3043", "TaxiOut": "14", "TaxiIn": "6", "DepDel15": "0", "Cancelled": "0", "NASDelay": ""}
+  ]
+}

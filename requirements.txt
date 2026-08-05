@@ -1,0 +1,11 @@
+openai>=1.40.0
+python-dotenv>=1.0.1
+pydantic>=2.7.0
+requests>=2.31.0
+streamlit>=1.37.0
+# Pinned below streamlit's declared "<2" ceiling: starlette 1.x made a
+# breaking change to GZipMiddleware that crashes streamlit 1.61's server
+# on every request. 0.52.1 is the last pre-1.0 release and is what
+# streamlit is actually tested against.
+starlette==0.52.1
+pytest>=8.2.0

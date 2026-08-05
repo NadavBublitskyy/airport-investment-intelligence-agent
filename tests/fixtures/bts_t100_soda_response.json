@@ -1,0 +1,10 @@
+{
+  "_comment": "Shaped exactly like a real response from https://data.bts.gov/resource/r495-tyji.json (verified live during development). Values are strings because Socrata's SODA API returns numeric fields as JSON strings.",
+  "BOS_2019": [
+    {"origin_airport_code": "BOS", "year": "2019", "passengers": "20742138", "seats": "25332809", "departures": "197886", "avg_distance": "1085.7081622426833"}
+  ],
+  "BOS_2024": [
+    {"origin_airport_code": "BOS", "year": "2024", "passengers": "21280480", "seats": "25622733", "departures": "190938", "avg_distance": "1173.1672272802114"}
+  ],
+  "empty": []
+}

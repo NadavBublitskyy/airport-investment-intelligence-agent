@@ -1,0 +1,21 @@
+{
+  "_comment": "Shaped exactly like real responses from api.weather.gov (verified live against KBOS/KSFO during development).",
+  "observation_sfo": {
+    "properties": {
+      "textDescription": "Mostly Cloudy",
+      "visibility": {"unitCode": "wmoUnit:m", "value": 16093.44},
+      "windSpeed": {"unitCode": "wmoUnit:km_h-1", "value": 11.16},
+      "windGust": {"unitCode": "wmoUnit:km_h-1", "value": null}
+    }
+  },
+  "alerts_ca_deduped_example": {
+    "features": [
+      {"properties": {"event": "Heat Advisory"}},
+      {"properties": {"event": "Heat Advisory"}},
+      {"properties": {"event": "Extreme Heat Warning"}},
+      {"properties": {"event": "Heat Advisory"}},
+      {"properties": {"event": "Red Flag Warning"}}
+    ]
+  },
+  "alerts_none": {"features": []}
+}

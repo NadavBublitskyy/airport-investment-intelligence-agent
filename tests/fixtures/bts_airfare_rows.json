@@ -1,0 +1,11 @@
+{
+  "_comment": "Shaped exactly like real rows from https://data.transportation.gov/resource/tfrh-tu9e.json (BTS Consumer Airfare Report Table 1a - verified live during development, including real Bay Area SFO/OAK/SJC rows).",
+  "bay_area_sample": [
+    {"airport_1": "ABQ", "airport_2": "OAK", "fare": "194.36", "passengers": "216.30"},
+    {"airport_1": "ABQ", "airport_2": "SFO", "fare": "246.07", "passengers": "188.15"},
+    {"airport_1": "ABQ", "airport_2": "SJC", "fare": "209.22", "passengers": "61.41"},
+    {"airport_1": "DAL", "airport_2": "OAK", "fare": "187.84", "passengers": "343.91"},
+    {"airport_1": "DAL", "airport_2": "SFO", "fare": "206.97", "passengers": "161.96"}
+  ],
+  "empty": []
+}
