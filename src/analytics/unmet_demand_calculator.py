@@ -72,8 +72,16 @@ def calculate_unmet_demand(airport: str = "SFO") -> UnmetDemandResult:
     if not early or not late:
         raise ValueError(f"Could not resolve T-100 traffic data for {airport} from any source.")
 
-    pax_growth_pct = (late["passengers"] - early["passengers"]) / early["passengers"] * 100
-    seat_growth_pct = (late["available_seats"] - early["available_seats"]) / early["available_seats"] * 100
+    # A zero baseline (a new or essentially-inactive airport in EARLY_YEAR) can't
+    # produce a meaningful growth rate - treat it as flat (0%) rather than crash.
+    pax_growth_pct = (
+        (late["passengers"] - early["passengers"]) / early["passengers"] * 100 if early["passengers"] else 0.0
+    )
+    seat_growth_pct = (
+        (late["available_seats"] - early["available_seats"]) / early["available_seats"] * 100
+        if early["available_seats"]
+        else 0.0
+    )
     load_factor = late["load_factor"]
     load_factor_llm = any(s.tier == "llm_fallback" and s.status == "success" for s in late_rd.trace)
 

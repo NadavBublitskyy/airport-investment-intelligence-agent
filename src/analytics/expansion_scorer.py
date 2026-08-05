@@ -91,8 +91,18 @@ def score_new_england_expansion(airports: list[str] | None = None) -> ExpansionR
         trace = list(early_rd.trace) + list(late_rd.trace) + list(facility_result.trace) + list(growth_result.trace)
         uses_llm = any(step.tier == "llm_fallback" and step.status == "success" for step in trace)
 
-        pax_growth_pct = (late["passengers"] - early["passengers"]) / early["passengers"] * 100
-        seat_growth_pct = (late["available_seats"] - early["available_seats"]) / early["available_seats"] * 100
+        # A zero baseline (a new or essentially-inactive airport in EARLY_YEAR) can't
+        # produce a meaningful growth rate - treat it as flat (0%) rather than crash.
+        pax_growth_pct = (
+            (late["passengers"] - early["passengers"]) / early["passengers"] * 100
+            if early["passengers"]
+            else 0.0
+        )
+        seat_growth_pct = (
+            (late["available_seats"] - early["available_seats"]) / early["available_seats"] * 100
+            if early["available_seats"]
+            else 0.0
+        )
         facility = facility_result.data or {}
         growth = growth_result.data or {}
 

@@ -35,7 +35,7 @@ def _t100_row(airport, year, passengers, seats, departures=1000.0, distance=1000
         "scheduled_departures": departures,
         "departures_performed": departures,
         "avg_distance_miles": distance,
-        "load_factor": round(passengers / seats, 4),
+        "load_factor": round(passengers / seats, 4) if seats else 0.0,
         "is_llm_estimate": False,
     }
 
@@ -118,6 +118,38 @@ class TestExpansionScorer:
             result = score_new_england_expansion(self.AIRPORTS)
 
         assert all(row.uses_llm_estimate for row in result.ranking)
+
+    def test_zero_baseline_passengers_does_not_raise_zero_division(self):
+        # A new or essentially-inactive airport with zero EARLY_YEAR traffic
+        # must not crash the whole ranking - growth is treated as flat (0%).
+        t100 = {
+            "BOS": {2019: (0.0, 100.0), 2024: (50.0, 100.0)},  # zero baseline passengers
+            "BDL": {2019: (100.0, 200.0), 2024: (110.0, 200.0)},
+        }
+        facility = {a: (2, 8000) for a in self.AIRPORTS}
+        growth = {a: 2.0 for a in self.AIRPORTS}
+        p1, p2, p3 = self._patch_all(t100, facility, growth)
+
+        with p1, p2, p3:
+            result = score_new_england_expansion(self.AIRPORTS)
+
+        bos_row = next(row for row in result.ranking if row.airport == "BOS")
+        assert bos_row.passenger_growth_pct == 0.0
+
+    def test_zero_baseline_seats_does_not_raise_zero_division(self):
+        t100 = {
+            "BOS": {2019: (0.0, 0.0), 2024: (50.0, 100.0)},  # zero baseline seats too
+            "BDL": {2019: (100.0, 200.0), 2024: (110.0, 200.0)},
+        }
+        facility = {a: (2, 8000) for a in self.AIRPORTS}
+        growth = {a: 2.0 for a in self.AIRPORTS}
+        p1, p2, p3 = self._patch_all(t100, facility, growth)
+
+        with p1, p2, p3:
+            result = score_new_england_expansion(self.AIRPORTS)
+
+        bos_row = next(row for row in result.ranking if row.airport == "BOS")
+        assert bos_row.seat_growth_pct == 0.0
 
 
 class TestCongestionComparator:
@@ -305,3 +337,22 @@ class TestUnmetDemandCalculator:
             result = calculate_unmet_demand("SFO")
         assert result.likely_dominant_cause in {c.name for c in result.components}
         assert len(result.root_cause_notes) >= 1
+
+    def test_zero_baseline_passengers_does_not_raise_zero_division(self):
+        # Same guard as expansion_scorer: a zero EARLY_YEAR passenger count
+        # must not crash the index - growth is treated as flat (0%) instead.
+        t100_data = {
+            2019: _rd(_t100_row("SFO", 2019, 0.0, 65_000_000.0)),
+            2024: _rd(_t100_row("SFO", 2024, 52_000_000.0, 62_000_000.0)),
+        }
+
+        def fake_t100(self, airport, years):
+            return {y: t100_data[y] for y in years}
+
+        _, fare_leakage_patch, ontime_patch = self._patch()
+        with patch(
+            "src.analytics.unmet_demand_calculator.BtsT100Client.get_annual_totals", fake_t100
+        ), fare_leakage_patch, ontime_patch:
+            result = calculate_unmet_demand("SFO")
+
+        assert 0.0 <= result.unmet_demand_index_0_100 <= 100.0
