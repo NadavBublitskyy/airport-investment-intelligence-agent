@@ -112,6 +112,13 @@ four things, and nothing else:
    conclusions), kept in the system message — a legitimate language task,
    distinct from the scoring math the LLM is never allowed to touch.
 
+A fifth, test-only use: `tests/test_evals.py` uses a real LLM as an independent
+judge to grade the agent's actual answers for a specific failure mode -
+hallucinating confident statistics for airports outside this system's real
+data coverage (non-US airports) instead of admitting the gap. It's opt-in
+(`RUN_LLM_EVALS=1`), since it costs real tokens and isn't part of the
+otherwise fully offline test suite.
+
 **Where AI is deliberately NOT used:** any arithmetic behind a score,
 ranking, percentage, or index. `src/analytics/*.py` has zero LLM
 dependency — the same inputs always produce the same output, and every
