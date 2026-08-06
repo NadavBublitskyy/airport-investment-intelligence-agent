@@ -44,6 +44,14 @@ class AirportExpansionScore(BaseModel):
     capacity_pressure_score: float = Field(description="0-1 normalized: passenger growth outpacing seat growth")
     load_factor_score: float = Field(description="0-1 normalized: how full flights are")
     runway_constraint_score: float = Field(description="0-1 normalized: how physically limited the airfield is")
+    runway_constraint_label: str = Field(
+        description=(
+            "Deterministic, pre-written description of this airport's runway-constraint rank within "
+            "the comparison set - use this verbatim (or a faithful paraphrase) when narrating; do not "
+            "reinterpret runway_constraint_score's direction yourself, since higher/lower is easy to "
+            "get backwards."
+        )
+    )
     census_growth_score: float = Field(description="0-1 normalized: regional population growth")
     latest_load_factor: float
     passenger_growth_pct: float

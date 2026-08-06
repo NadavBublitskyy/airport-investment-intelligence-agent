@@ -178,6 +178,38 @@ class TestExpansionScorer:
         assert bos_row.runway_constraint_score == 0.5
         assert any("BOS" in note and "runway" in note.lower() for note in result.assumptions)
 
+    def test_runway_constraint_label_gives_deterministic_direction(self):
+        # The LLM has been observed narrating runway_constraint_score
+        # backwards (calling a high score "not a limiting factor"). The
+        # label is pre-written in code specifically so the agent doesn't
+        # have to interpret the raw number's direction itself.
+        t100 = {a: {2019: (100.0, 200.0), 2024: (110.0, 200.0)} for a in self.AIRPORTS}
+        growth = {a: 2.0 for a in self.AIRPORTS}
+        # BOS: many long runways -> low constraint. BDL: few short runways -> high constraint.
+        facility = {"BOS": (6, 10000), "BDL": (2, 5000)}
+        p1, p2, p3 = self._patch_all(t100, facility, growth)
+
+        with p1, p2, p3:
+            result = score_new_england_expansion(self.AIRPORTS)
+
+        by_airport = {row.airport: row for row in result.ranking}
+        assert "MOST runway-constrained" in by_airport["BDL"].runway_constraint_label
+        assert "LEAST runway-constrained" in by_airport["BOS"].runway_constraint_label
+
+    def test_runway_constraint_label_middle_rank_is_numeric(self):
+        t100 = {a: {2019: (100.0, 200.0), 2024: (110.0, 200.0)} for a in ["BOS", "BDL", "PVD"]}
+        growth = {a: 2.0 for a in ["BOS", "BDL", "PVD"]}
+        facility = {"BOS": (6, 10000), "BDL": (3, 7000), "PVD": (2, 5000)}
+        p1, p2, p3 = self._patch_all(t100, facility, growth)
+
+        with p1, p2, p3:
+            result = score_new_england_expansion(["BOS", "BDL", "PVD"])
+
+        bdl_row = next(row for row in result.ranking if row.airport == "BDL")
+        assert bdl_row.runway_constraint_label == (
+            "Ranked 2 of 3 for runway constraint in this comparison (1 = most constrained, 3 = least constrained)."
+        )
+
 
 class TestCongestionComparator:
     def _patch(self, stats_by_airport, facility_by_airport):

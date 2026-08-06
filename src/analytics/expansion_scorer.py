@@ -81,6 +81,48 @@ def _runway_constraint_raw(facility: dict | None) -> float | None:
     return 1.0 / capacity_proxy if capacity_proxy else None
 
 
+def _runway_constraint_labels(scores: list[float]) -> list[str]:
+    """
+    Turn each airport's normalized runway_constraint_score into a fixed,
+    unambiguous sentence instead of leaving the LLM to interpret the raw
+    number's direction at narration time - which, in practice, it gets
+    backwards often enough to be a real problem (verified: the same model,
+    same data, described a score of 1.0 as "not a limiting factor" in one
+    run and correctly as "the most constrained" in another). The score
+    itself stays available for anyone who wants the raw number; this label
+    is the one the agent is instructed to actually narrate from.
+    """
+    total = len(scores)
+    if total == 1:
+        return ["Only airport in this comparison - no relative runway-constraint ranking available."]
+
+    # Rank 1 = most constrained (highest score). Ties share the same rank.
+    order = sorted(range(total), key=lambda i: scores[i], reverse=True)
+    ranks = [0] * total
+    for position, idx in enumerate(order, start=1):
+        ranks[idx] = position
+
+    labels = []
+    for i in range(total):
+        rank = ranks[i]
+        if rank == 1:
+            labels.append(
+                f"MOST runway-constrained of the {total} airports compared - the strongest "
+                "runway-based signal that expansion could help."
+            )
+        elif rank == total:
+            labels.append(
+                f"LEAST runway-constrained of the {total} airports compared - runways are "
+                "unlikely to be the limiting factor here."
+            )
+        else:
+            labels.append(
+                f"Ranked {rank} of {total} for runway constraint in this comparison "
+                f"(1 = most constrained, {total} = least constrained)."
+            )
+    return labels
+
+
 def score_new_england_expansion(airports: list[str] | None = None) -> ExpansionRankingResult:
     """
     Rank New England airports by terminal-expansion investment attractiveness.
@@ -150,6 +192,7 @@ def score_new_england_expansion(airports: list[str] | None = None) -> ExpansionR
     load_norm = _min_max_normalize([r["load_factor_raw"] for r in raw_rows])
     runway_norm = _min_max_normalize_with_gaps([r["runway_constraint_raw"] for r in raw_rows])
     census_norm = _min_max_normalize([r["census_growth_raw"] for r in raw_rows])
+    runway_labels = _runway_constraint_labels(runway_norm)
 
     airports_missing_runway_data = [r["airport"] for r in raw_rows if r["runway_constraint_raw"] is None]
 
@@ -160,7 +203,11 @@ def score_new_england_expansion(airports: list[str] | None = None) -> ExpansionR
         "ranking, not an absolute score comparable across different airport groups.",
         "Runway constraint is a proxy (num_runways x longest_runway_ft), not a full airfield capacity "
         "model (it ignores taxiway layout, terminal gate count, and airspace/ATC constraints - the "
-        "real FAA facilities dataset does not publish a gate count or hub-size category).",
+        "real FAA facilities dataset does not publish a gate count or hub-size category). IMPORTANT "
+        "for narration: do NOT interpret runway_constraint_score's direction yourself (higher vs. "
+        "lower is easy to get backwards) - each airport already has a runway_constraint_label field "
+        "with a fixed, correct sentence describing its rank; use that verbatim or paraphrase it "
+        "faithfully instead of reasoning about the raw number.",
         "Regional population growth is county-level (US Census ACS 5-year estimate for the airport's "
         "home county), used as a proxy for the whole catchment area.",
         "Any airport whose data_sources show tier='llm_fallback' had at least one real API fail; "
@@ -175,7 +222,9 @@ def score_new_england_expansion(airports: list[str] | None = None) -> ExpansionR
         )
 
     scored: list[AirportExpansionScore] = []
-    for row, cap, load, rwy, census in zip(raw_rows, capacity_norm, load_norm, runway_norm, census_norm):
+    for row, cap, load, rwy, census, rwy_label in zip(
+        raw_rows, capacity_norm, load_norm, runway_norm, census_norm, runway_labels
+    ):
         overall = (
             c.expansion_weight_capacity_pressure * cap
             + c.expansion_weight_load_factor * load
@@ -188,6 +237,7 @@ def score_new_england_expansion(airports: list[str] | None = None) -> ExpansionR
                 capacity_pressure_score=round(cap, 3),
                 load_factor_score=round(load, 3),
                 runway_constraint_score=round(rwy, 3),
+                runway_constraint_label=rwy_label,
                 census_growth_score=round(census, 3),
                 latest_load_factor=row["latest_load_factor"],
                 passenger_growth_pct=row["passenger_growth_pct"],
